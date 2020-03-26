@@ -21,16 +21,20 @@ function extendPackageJson(api) {
   const devDependencies = {
     '@quasar/app': '^1.6.0',
     '@types/node': '^10.17.15',
+    // TODO: having eslint-plugin separated from it's parser counterpart is really bad, even if it's the "best practice"
     '@typescript-eslint/eslint-plugin': '^2.17.0',
-    'eslint-config-quasar': 'file:../quasar/eslint-config-quasar',
+    // TODO: change with actual eslint-config-quasar
+    // 'eslint-config-quasar': 'file:../quasar/eslint-config-quasar',
     ...(api.prompts.componentStyle === 'composition'
       ? { '@vue/composition-api': '^0.4.0' }
       : {}),
     ...(api.prompts.componentStyle === 'class'
       ? { 'vue-class-component': '^7.2.2', 'vue-property-decorator': '^8.3.0' }
       : {}),
+    // TODO: why we put eslint here, but not typescript? Why not providing eslint from @quasar/app?
     ...(!api.hasPackage('eslint', '>=6') ? { eslint: '^6.8.0' } : {}),
-    typescript: '^3.7.5'
+    // TODO: uninstall typescript as well
+    typescript: '^3.8.2'
   }
 
   api.extendPackageJson({
@@ -142,7 +146,8 @@ function disableBuildLintingOnDev(quasarConfigText) {
   )
 }
 
-function addBootHelper(bootFolder) {
+function addBootHelper(api) {
+  const bootFolder = api.resolve.src('boot')
   const bootFiles = fs
     .readdirSync(bootFolder)
     .filter(fileName => fileName !== '.gitkeep')
@@ -185,6 +190,53 @@ function addBootHelper(bootFolder) {
   }
 }
 
+function addRouteHelper(api) {
+  const routerFilePath = api.resolve.src('./router/index.js')
+  let routerFileContent = fs.readFileSync(routerFilePath, 'utf8')
+
+  // We skip the file if route() helper is already there or if no function is returned
+  if (
+    routerFileContent.includes('export default route') ||
+    !routerFileContent.includes('export default')
+  ) {
+    return
+  }
+
+  routerFileContent =
+    routerFileContent.replace(
+      'export default',
+      `import { route } from 'quasar/wrappers';\n\nexport default route(`
+    ) + ')'
+
+  fs.writeFileSync(routerFilePath, routerFileContent)
+}
+
+function addStoreHelper(api) {
+  const storeFilePath = api.resolve.src('./store/index.js')
+  // We skip the update if store hasn't been used
+  if (!fs.existsSync(storeFilePath)) {
+    return
+  }
+
+  let storeFileContent = fs.readFileSync(storeFilePath, 'utf8')
+
+  // We skip the file if route() helper is already there or if no function is returned
+  if (
+    storeFileContent.includes('export default store') ||
+    !storeFileContent.includes('export default')
+  ) {
+    return
+  }
+
+  storeFileContent =
+    storeFileContent.replace(
+      'export default',
+      `import { store } from 'quasar/wrappers';\n\nexport default store(`
+    ) + ')'
+
+  fs.writeFileSync(storeFilePath, storeFileContent)
+}
+
 async function updateCode(api) {
   const util = require('util')
   const glob = util.promisify(require('glob'))
@@ -198,7 +250,9 @@ async function updateCode(api) {
 
   fs.writeFileSync(quasarConfigPath, quasarConfigText)
 
-  addBootHelper(api.resolve.src('boot'))
+  addBootHelper(api)
+  addRouteHelper(api)
+  addStoreHelper(api)
 
   // List of files that export Vue instance
   const vueComponentScriptFiles = []
@@ -329,9 +383,10 @@ module.exports = async api => {
     )
   }
 
-  console.log(
-    "@quasar/typescript AE will now uninstall its dependency because it's no longer needed"
-  )
-  await execa('quasar', ['ext', 'remove', '@quasar/typescript'])
-  console.log('@quasar/typescript AE succesfully uninstalled its dependency!')
+  // TODO: for some reason, calling quasar cli into here prevents render commands to take place
+  // console.log(
+  //   "@quasar/typescript AE will now uninstall its dependency because it's no longer needed"
+  // )
+  // await execa('quasar', ['ext', 'remove', '@quasar/typescript'])
+  // console.log('@quasar/typescript AE succesfully uninstalled its dependency!')
 }
