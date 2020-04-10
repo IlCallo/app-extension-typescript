@@ -13,36 +13,30 @@ function abort(message) {
 
 function extendPackageJson(api) {
   const dependencies = {
-    quasar: '^1.9.2'
+    quasar: '^1.9.2',
   }
 
-  // TODO: we need a way to detect if ESLint was configured (maybe checking for .eslintrc.js? Or checking if ESLint dependency is present)
-  // And if it is not, we must add it to the devDeps
   const devDependencies = {
     '@quasar/app': '^1.6.0',
     '@types/node': '^10.17.15',
-    // TODO: having eslint-plugin separated from it's parser counterpart is really bad, even if it's the "best practice"
     '@typescript-eslint/eslint-plugin': '^2.17.0',
-    // TODO: change with actual eslint-config-quasar
-    // 'eslint-config-quasar': 'file:../quasar/eslint-config-quasar',
+    '@typescript-eslint/parser': '^2.17.0',
+    'eslint-config-quasar': 'file:../quasar/eslint-config-quasar',
     ...(api.prompts.componentStyle === 'composition'
-      ? { '@vue/composition-api': '^0.4.0' }
+      ? { '@vue/composition-api': '^0.5.0' }
       : {}),
     ...(api.prompts.componentStyle === 'class'
       ? { 'vue-class-component': '^7.2.2', 'vue-property-decorator': '^8.3.0' }
       : {}),
-    // TODO: why we put eslint here, but not typescript? Why not providing eslint from @quasar/app?
     ...(!api.hasPackage('eslint', '>=6') ? { eslint: '^6.8.0' } : {}),
-    // TODO: uninstall typescript as well
-    typescript: '^3.8.2'
   }
 
   api.extendPackageJson({
     dependencies,
     devDependencies,
     scripts: {
-      lint: 'eslint --ext .js,.ts,.vue --ignore-path .gitignore ./'
-    }
+      lint: 'eslint --ext .js,.ts,.vue --ignore-path .gitignore ./',
+    },
   })
 }
 
@@ -60,7 +54,7 @@ function vsCodeConfiguration(api) {
     'vetur.validation.template': false,
     'eslint.validate': ['javascript', 'javascriptreact', 'typescript', 'vue'],
     'typescript.tsdk': 'node_modules/typescript/lib',
-    ...(api.prompts.prettier ? { 'vetur.format.enable': false } : {})
+    ...(api.prompts.prettier ? { 'vetur.format.enable': false } : {}),
   })
 
   if (!fs.existsSync('.vscode/extensions.json')) {
@@ -71,13 +65,13 @@ function vsCodeConfiguration(api) {
     recommendations: [
       ...(api.prompts.prettier ? ['esbenp.prettier-vscode'] : []),
       'dbaeumer.vscode-eslint',
-      'octref.vetur'
+      'octref.vetur',
     ],
     unwantedRecommendations: [
       'hookyqr.beautify',
       'dbaeumer.jshint',
-      'ms-vscode.vscode-typescript-tslint-plugin'
-    ]
+      'ms-vscode.vscode-typescript-tslint-plugin',
+    ],
   })
 }
 
@@ -142,7 +136,7 @@ function disableBuildLintingOnDev(quasarConfigText) {
 
   return quasarConfigText.replace(
     replaceRegex,
-    match => `if (process.env.NODE_ENV === 'production') {\n${match}\n}`
+    (match) => `if (process.env.NODE_ENV === 'production') {\n${match}\n}`
   )
 }
 
@@ -150,8 +144,8 @@ function addBootHelper(api) {
   const bootFolder = api.resolve.src('boot')
   const bootFiles = fs
     .readdirSync(bootFolder)
-    .filter(fileName => fileName !== '.gitkeep')
-    .map(fileName => path.join(bootFolder, fileName))
+    .filter((fileName) => fileName !== '.gitkeep')
+    .map((fileName) => path.join(bootFolder, fileName))
 
   for (const bootFile of bootFiles) {
     let bootFileContent = fs.readFileSync(bootFile, 'utf8')
@@ -264,11 +258,11 @@ async function updateCode(api) {
       : `import Vue from 'vue'\n\nexport default Vue.extend`
 
   const vueFiles = await glob(api.resolve.app('src/**/*.vue'))
-  vueFiles.forEach(file => {
+  vueFiles.forEach((file) => {
     const fileDir = path.parse(file).dir
     let text = fs.readFileSync(file, 'utf8')
 
-    text = text.replace(/<script.*>/, tag => {
+    text = text.replace(/<script.*>/, (tag) => {
       tag = tag.replace(/lang="(js|javascript)" ?/, '')
       tag = tag.replace(/src="(.*)\.js"/, (tag, fileName) => {
         // Record that file exports a Vue instance
@@ -288,7 +282,7 @@ async function updateCode(api) {
 
   const jsFiles = await glob(api.resolve.app('src/**/*.js'))
 
-  jsFiles.forEach(file => {
+  jsFiles.forEach((file) => {
     let text = fs.readFileSync(file, 'utf8')
     // Only change files that export a Vue instance
     if (vueComponentScriptFiles.includes(file)) {
@@ -332,13 +326,13 @@ async function updateCode(api) {
   }
 }
 
-module.exports = async api => {
+module.exports = async (api) => {
   api.compatibleWith('quasar', '>=1.0.0')
   api.compatibleWith('@quasar/app', '>=1.0.0')
 
   api.render('./templates/base', {
     useClassComponentStyle: api.prompts.componentStyle === 'class',
-    withPrettier: api.prompts.prettier
+    withPrettier: api.prompts.prettier,
   })
 
   extendPackageJson(api)
@@ -382,6 +376,12 @@ module.exports = async api => {
       "Linter found some errors which wasn'n able to automatically fix, please fix them manually"
     )
   }
+
+  // Remove typescript dependency, if present, because it's already provided by "@quasar/app"
+  await execa(nodePackager, [
+    nodePackager === 'npm' ? 'uninstall' : 'remove',
+    'typescript',
+  ])
 
   // TODO: for some reason, calling quasar cli into here prevents render commands to take place
   // console.log(
